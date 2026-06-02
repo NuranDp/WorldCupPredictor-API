@@ -17,7 +17,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(
             builder.Configuration.GetConnectionString("SupabaseConnection"),
             o => o.MigrationsHistoryTable("__EFMigrationsHistory")
-                  .MigrationsAssembly(typeof(AppDbContext).Assembly.FullName));
+                  .MigrationsAssembly(typeof(AppDbContext).Assembly.FullName))
+               .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
     else
         options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
 });

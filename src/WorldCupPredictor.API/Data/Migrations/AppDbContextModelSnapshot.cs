@@ -498,6 +498,37 @@ namespace WorldCupPredictor.API.Data.Migrations
                     b.ToTable("UserGroupMembers");
                 });
 
+            modelBuilder.Entity("WorldCupPredictor.API.Models.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Expiry")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshTokens");
+                });
+
             modelBuilder.Entity("WorldCupPredictor.API.Models.ActualBest3rdQualifier", b =>
                 {
                     b.HasOne("WorldCupPredictor.API.Models.Team", "Team")
@@ -756,6 +787,17 @@ namespace WorldCupPredictor.API.Data.Migrations
             modelBuilder.Entity("WorldCupPredictor.API.Models.UserGroup", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("WorldCupPredictor.API.Models.RefreshToken", b =>
+                {
+                    b.HasOne("WorldCupPredictor.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 #pragma warning restore 612, 618
         }

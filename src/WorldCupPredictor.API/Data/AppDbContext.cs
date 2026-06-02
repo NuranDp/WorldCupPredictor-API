@@ -20,6 +20,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Player> Players => Set<Player>();
     public DbSet<BracketPickLineupPlayer> BracketPickLineupPlayers => Set<BracketPickLineupPlayer>();
     public DbSet<BracketDraft> BracketDrafts => Set<BracketDraft>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -124,6 +125,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(d => d.User).WithMany()
              .HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
             // nvarchar(max) on SQL Server, text on PostgreSQL — EF handles this automatically
+        });
+
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.HasIndex(r => r.Token).IsUnique();
+            e.HasOne(r => r.User).WithMany()
+             .HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

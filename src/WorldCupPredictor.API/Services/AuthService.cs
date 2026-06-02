@@ -9,8 +9,6 @@ namespace WorldCupPredictor.API.Services;
 
 public class AuthService(AppDbContext db, ITokenService tokenService, IConfiguration config) : IAuthService
 {
-    // In-memory refresh token store; swap for a DB table in a later phase
-    private static readonly Dictionary<string, (int UserId, DateTime Expiry)> RefreshTokens = new();
 
     public async Task<AuthResponse> RegisterAsync(string name, string email, string password, string? phoneNumber)
     {
@@ -29,7 +27,7 @@ public class AuthService(AppDbContext db, ITokenService tokenService, IConfigura
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        return BuildAuthResponse(user);
+        return await BuildAuthResponse(user);
     }
 
     public async Task<AuthResponse> LoginAsync(string email, string password)
@@ -39,7 +37,7 @@ public class AuthService(AppDbContext db, ITokenService tokenService, IConfigura
         if (user is null || user.PasswordHash is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             throw new UnauthorizedAccessException("Invalid email or password.");
 
-        return BuildAuthResponse(user);
+        return await BuildAuthResponse(user);
     }
 
     public async Task<AuthResponse> GoogleLoginAsync(string idToken)
@@ -81,28 +79,36 @@ public class AuthService(AppDbContext db, ITokenService tokenService, IConfigura
         }
 
         await db.SaveChangesAsync();
-        return BuildAuthResponse(user);
+        return await BuildAuthResponse(user);
     }
 
     public async Task<AuthResponse> RefreshTokenAsync(string refreshToken)
     {
-        if (!RefreshTokens.TryGetValue(refreshToken, out var entry) || entry.Expiry < DateTime.UtcNow)
+        var entry = await db.RefreshTokens
+            .Include(r => r.User)
+            .FirstOrDefaultAsync(r => r.Token == refreshToken);
+
+        if (entry is null || entry.IsRevoked || entry.Expiry < DateTime.UtcNow)
             throw new UnauthorizedAccessException("Invalid or expired refresh token.");
 
-        RefreshTokens.Remove(refreshToken);
+        entry.IsRevoked = true;
+        await db.SaveChangesAsync();
 
-        var user = await db.Users.FindAsync(entry.UserId)
-            ?? throw new UnauthorizedAccessException("User not found.");
-
-        return BuildAuthResponse(user);
+        return await BuildAuthResponse(entry.User);
     }
 
-    private AuthResponse BuildAuthResponse(User user)
+    private async Task<AuthResponse> BuildAuthResponse(User user)
     {
         var access = tokenService.GenerateAccessToken(user);
         var refresh = tokenService.GenerateRefreshToken();
 
-        RefreshTokens[refresh] = (user.Id, DateTime.UtcNow.AddDays(30));
+        db.RefreshTokens.Add(new Models.RefreshToken
+        {
+            Token = refresh,
+            UserId = user.Id,
+            Expiry = DateTime.UtcNow.AddDays(30),
+        });
+        await db.SaveChangesAsync();
 
         return new AuthResponse(
             access,
