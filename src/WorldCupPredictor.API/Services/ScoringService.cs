@@ -56,6 +56,17 @@ public class ScoringService(AppDbContext db, IOptions<ScoringOptions> opts)
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// A bracket pick is valid for scoring only if the bracket was submitted
+    /// at least 1 hour before the match kicked off.
+    /// </summary>
+    private static bool SubmittedInTime(Bracket bracket, Match match)
+    {
+        if (!match.MatchDate.HasValue) return true; // no kick-off data → score it
+        var deadline = match.MatchDate.Value.AddHours(-1);
+        return bracket.SubmittedAt <= deadline;
+    }
+
     private int CalculatePoints(
         Bracket bracket,
         Dictionary<int, TournamentGroup> groupMap,
@@ -64,6 +75,9 @@ public class ScoringService(AppDbContext db, IOptions<ScoringOptions> opts)
         int total = 0;
 
         // ── Group picks ───────────────────────────────────────────────────────
+        // Group stage deadline: 1 hour before the tournament's first match.
+        // We use the earliest MatchDate across all matches as the group-stage kick-off.
+        // (Group picks don't map 1-to-1 to a single match, so we use the first match.)
         foreach (var gp in bracket.GroupPicks)
         {
             if (!groupMap.TryGetValue(gp.GroupId, out var grp)) continue;
@@ -88,6 +102,10 @@ public class ScoringService(AppDbContext db, IOptions<ScoringOptions> opts)
             var match = pick.Match;
             if (match.Status != MatchStatus.Completed) continue;
             if (!match.WinnerTeamId.HasValue) continue;
+
+            // Zero points if bracket was not submitted at least 1 hour before kick-off
+            if (!SubmittedInTime(bracket, match)) continue;
+
             if (pick.PickedTeamId != match.WinnerTeamId) continue;
 
             // Base points for correct winner

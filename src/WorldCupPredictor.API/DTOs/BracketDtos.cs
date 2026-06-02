@@ -14,7 +14,8 @@ public record KnockoutPickDto(
     int? PickedTeamId,
     int? HomeScore,
     int? AwayScore,
-    List<int> LineupPlayerIds
+    List<int> LineupPlayerIds,
+    DateTime? KickOffTime
 );
 
 public record Best3rdPickDto(int Rank, int? TeamId);

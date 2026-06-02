@@ -33,9 +33,8 @@ public class BracketService(AppDbContext db) : IBracketService
 
     public async Task<BracketDto> SaveBracketAsync(int userId, BracketSubmitRequest request)
     {
-        var config = await db.TournamentConfigs.FirstOrDefaultAsync(c => c.IsActive);
-        if (config != null && DateTime.UtcNow >= config.BracketLockDate)
-            throw new InvalidOperationException("Bracket submissions are locked.");
+        // No hard lock — scoring is enforced per-match via SubmittedAt vs match kick-off time.
+        // Users can submit/update at any time; picks submitted < 1 hour before a match score 0.
 
         var bracket = await db.Brackets
             .Include(b => b.GroupPicks)
@@ -176,7 +175,8 @@ public class BracketService(AppDbContext db) : IBracketService
               p.PickedTeamId,
               p.HomeScore,
               p.AwayScore,
-              p.LineupPlayers.Select(l => l.PlayerId).ToList()))
+              p.LineupPlayers.Select(l => l.PlayerId).ToList(),
+              p.Match.MatchDate))
           .ToList(),
         b.Best3rdPicks
           .OrderBy(p => p.Rank)
