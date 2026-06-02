@@ -22,6 +22,7 @@ public record Best3rdPickDto(int Rank, int? TeamId);
 
 public record BracketDto(
     int Id,
+    string ShareToken,
     bool IsLocked,
     int TotalPoints,
     DateTime SubmittedAt,

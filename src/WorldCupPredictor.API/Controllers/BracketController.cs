@@ -29,11 +29,11 @@ public class BracketController(IBracketService bracketService) : ControllerBase
         return bracket is null ? NotFound() : Ok(bracket);
     }
 
-    [HttpGet("share/{bracketId:int}")]
+    [HttpGet("share/{token}")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetSharedBracket(int bracketId)
+    public async Task<IActionResult> GetSharedBracket(string token)
     {
-        var bracket = await bracketService.GetBracketByIdAsync(bracketId);
+        var bracket = await bracketService.GetBracketByTokenAsync(token);
         return bracket is null ? NotFound() : Ok(bracket);
     }
 

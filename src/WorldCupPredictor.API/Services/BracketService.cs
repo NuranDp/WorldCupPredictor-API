@@ -31,6 +31,18 @@ public class BracketService(AppDbContext db) : IBracketService
         return bracket is null ? null : MapToDto(bracket);
     }
 
+    public async Task<BracketDto?> GetBracketByTokenAsync(string shareToken)
+    {
+        var bracket = await db.Brackets
+            .Include(b => b.GroupPicks).ThenInclude(gp => gp.Group)
+            .Include(b => b.Picks).ThenInclude(p => p.Match)
+            .Include(b => b.Picks).ThenInclude(p => p.LineupPlayers)
+            .Include(b => b.Best3rdPicks)
+            .FirstOrDefaultAsync(b => b.ShareToken == shareToken);
+
+        return bracket is null ? null : MapToDto(bracket);
+    }
+
     public async Task<BracketDto> SaveBracketAsync(int userId, BracketSubmitRequest request)
     {
         // No hard lock — scoring is enforced per-match via SubmittedAt vs match kick-off time.
@@ -51,6 +63,8 @@ public class BracketService(AppDbContext db) : IBracketService
         else
         {
             bracket.SubmittedAt = DateTime.UtcNow;
+            if (string.IsNullOrEmpty(bracket.ShareToken))
+                bracket.ShareToken = Guid.NewGuid().ToString("N");
         }
 
         // ── Tier ──────────────────────────────────────────────────────────────
@@ -159,6 +173,7 @@ public class BracketService(AppDbContext db) : IBracketService
 
     private static BracketDto MapToDto(Bracket b) => new(
         b.Id,
+        b.ShareToken,
         b.IsLocked,
         b.TotalPoints,
         b.SubmittedAt,

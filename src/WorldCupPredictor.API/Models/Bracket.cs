@@ -4,6 +4,7 @@ public class Bracket
 {
     public int Id { get; set; }
     public int UserId { get; set; }
+    public string ShareToken { get; set; } = Guid.NewGuid().ToString("N"); // opaque share token
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
     public bool IsLocked { get; set; }
     public int TotalPoints { get; set; }
