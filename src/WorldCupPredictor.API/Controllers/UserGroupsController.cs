@@ -153,6 +153,7 @@ public class UserGroupsController(AppDbContext db) : ControllerBase
                 AvatarUrl   = m.User.AvatarUrl,
                 TotalPoints = m.User.Bracket!.TotalPoints,
                 SubmittedAt = m.User.Bracket.SubmittedAt,
+                ShareToken  = m.User.Bracket.ShareToken,
             })
             .OrderByDescending(e => e.TotalPoints)
             .ThenBy(e => e.SubmittedAt)
@@ -164,6 +165,7 @@ public class UserGroupsController(AppDbContext db) : ControllerBase
                 e.AvatarUrl,
                 e.TotalPoints,
                 e.SubmittedAt,
+                e.ShareToken,
             })
             .ToList();
 
