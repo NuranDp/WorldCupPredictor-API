@@ -219,7 +219,7 @@ public class UserGroupsController(AppDbContext db) : ControllerBase
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private static string GenerateCode() =>
-        Guid.NewGuid().ToString("N")[..6].ToUpper();
+        Guid.NewGuid().ToString("N")[..10].ToUpper();
 }
 
 public record CreateGroupRequest(string Name);
