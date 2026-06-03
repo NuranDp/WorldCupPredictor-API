@@ -31,6 +31,7 @@ public class LeaderboardController(AppDbContext db) : ControllerBase
                 b.TotalPoints,
                 b.SubmittedAt,
                 Tier = b.Tier.ToString(),
+                b.ShareToken,
             })
             .ToListAsync();
 
@@ -40,7 +41,8 @@ public class LeaderboardController(AppDbContext db) : ControllerBase
             Name: e.Name,
             AvatarUrl: e.AvatarUrl,
             TotalPoints: e.TotalPoints,
-            SubmittedAt: e.SubmittedAt
+            SubmittedAt: e.SubmittedAt,
+            ShareToken: e.ShareToken
         )).ToList();
 
         return Ok(result);

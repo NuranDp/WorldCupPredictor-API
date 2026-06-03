@@ -40,7 +40,8 @@ public record LeaderboardEntryDto(
     string Name,
     string? AvatarUrl,
     int TotalPoints,
-    DateTime? SubmittedAt
+    DateTime? SubmittedAt,
+    string? ShareToken
 );
 
 // ── Requests ──────────────────────────────────────────────────────────────────
