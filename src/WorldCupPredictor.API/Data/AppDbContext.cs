@@ -21,6 +21,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<BracketPickLineupPlayer> BracketPickLineupPlayers => Set<BracketPickLineupPlayer>();
     public DbSet<BracketDraft> BracketDrafts => Set<BracketDraft>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Giveaway> Giveaways => Set<Giveaway>();
+    public DbSet<GiveawayEntry> GiveawayEntries => Set<GiveawayEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -132,6 +134,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(r => r.Token).IsUnique();
             e.HasOne(r => r.User).WithMany()
              .HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Giveaway>(e =>
+        {
+            e.HasOne(g => g.Match).WithMany()
+             .HasForeignKey(g => g.MatchId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(g => g.Winner).WithMany()
+             .HasForeignKey(g => g.WinnerUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GiveawayEntry>(e =>
+        {
+            e.HasIndex(ge => new { ge.GiveawayId, ge.UserId }).IsUnique();
+            e.HasOne(ge => ge.Giveaway).WithMany(g => g.Entries)
+             .HasForeignKey(ge => ge.GiveawayId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(ge => ge.User).WithMany()
+             .HasForeignKey(ge => ge.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

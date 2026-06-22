@@ -29,10 +29,10 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
 
     // ── Trigger ESPN sync (free, no key) ─────────────────────────────────────
     [HttpPost("sync-results")]
-    public async Task<IActionResult> SyncResults()
+    public async Task<IActionResult> SyncResults([FromQuery] int days = 3)
     {
         if (!IsAdmin) return Forbid();
-        var count = await espn.SyncResultsAsync();
+        var count = await espn.SyncResultsAsync(days);
         return Ok(new { updated = count });
     }
 
@@ -144,6 +144,37 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
         return Ok(matches);
     }
 
+    // ── Get all group stage matches with kickoff times ────────────────────────
+    [HttpGet("group-matches")]
+    public async Task<IActionResult> GetGroupStageMatches()
+    {
+        if (!IsAdmin) return Forbid();
+
+        var matches = await db.Matches
+            .Where(m => m.Round == MatchRound.GroupStage)
+            .Include(m => m.HomeTeam).ThenInclude(t => t!.Group)
+            .Include(m => m.AwayTeam)
+            .OrderBy(m => m.MatchDate)
+            .Select(m => new
+            {
+                m.Id,
+                GroupName = m.HomeTeam!.Group.Name,
+                HomeTeamId = m.HomeTeamId,
+                HomeTeamName = m.HomeTeam.Name,
+                HomeTeamFlag = m.HomeTeam.FlagUrl,
+                AwayTeamId = m.AwayTeamId,
+                AwayTeamName = m.AwayTeam!.Name,
+                AwayTeamFlag = m.AwayTeam.FlagUrl,
+                m.MatchDate,
+                Status = m.Status.ToString(),
+                m.HomeScore,
+                m.AwayScore,
+            })
+            .ToListAsync();
+
+        return Ok(matches);
+    }
+
     // ── Get all groups with actual standings ──────────────────────────────────
     [HttpGet("groups")]
     public async Task<IActionResult> GetAdminGroups()
@@ -180,8 +211,150 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
 
         return Ok(new { teamIds = qualifiers });
     }
+
+    // ── Create a giveaway ─────────────────────────────────────────────────────
+    [HttpPost("giveaway")]
+    public async Task<IActionResult> CreateGiveaway([FromBody] CreateGiveawayRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var hasOpen = await db.Giveaways.AnyAsync(g => g.Status != GiveawayStatus.Drawn);
+        if (hasOpen) return BadRequest(new { message = "Close or draw the existing giveaway first." });
+
+        var match = await db.Matches.FindAsync(req.MatchId);
+        if (match is null) return NotFound(new { message = "Match not found." });
+
+        var giveaway = new Giveaway { MatchId = req.MatchId, Prize = req.Prize };
+        db.Giveaways.Add(giveaway);
+        await db.SaveChangesAsync();
+
+        return Ok(new { giveaway.Id });
+    }
+
+    // ── Close entries ─────────────────────────────────────────────────────────
+    [HttpPost("giveaway/{id:int}/close")]
+    public async Task<IActionResult> CloseGiveaway(int id)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var giveaway = await db.Giveaways.FindAsync(id);
+        if (giveaway is null) return NotFound();
+        if (giveaway.Status != GiveawayStatus.Open)
+            return BadRequest(new { message = "Giveaway is not open." });
+
+        giveaway.Status = GiveawayStatus.Closed;
+        await db.SaveChangesAsync();
+
+        return Ok(new { message = "Entries closed." });
+    }
+
+    // ── Draw winner ───────────────────────────────────────────────────────────
+    [HttpPost("giveaway/{id:int}/draw")]
+    public async Task<IActionResult> DrawGiveaway(int id)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var giveaway = await db.Giveaways
+            .Include(g => g.Match)
+            .Include(g => g.Entries).ThenInclude(e => e.User)
+            .FirstOrDefaultAsync(g => g.Id == id);
+
+        if (giveaway is null) return NotFound();
+        if (giveaway.Status == GiveawayStatus.Drawn)
+            return BadRequest(new { message = "Winner already drawn." });
+        if (!giveaway.Entries.Any())
+            return BadRequest(new { message = "No entries to draw from." });
+
+        const int MinParticipants = 100;
+        int totalEntries = giveaway.Entries.Count;
+
+        if (totalEntries < MinParticipants)
+            return BadRequest(new { message = $"Need at least {MinParticipants} entries to draw. Current: {totalEntries}." });
+
+        List<GiveawayEntry> correctPool = giveaway.Match.Status == MatchStatus.Completed
+            && giveaway.Match.HomeScore.HasValue
+            && giveaway.Match.AwayScore.HasValue
+            ? giveaway.Entries
+                .Where(e => e.HomeScore == giveaway.Match.HomeScore.Value
+                         && e.AwayScore == giveaway.Match.AwayScore.Value)
+                .ToList()
+            : [];
+
+        bool isLuckyDraw = correctPool.Count == 0;
+        var pool = isLuckyDraw ? giveaway.Entries.ToList() : correctPool;
+
+        var winner = pool[Random.Shared.Next(pool.Count)];
+
+        giveaway.WinnerUserId = winner.UserId;
+        giveaway.DrawnAt = DateTime.UtcNow;
+        giveaway.Status = GiveawayStatus.Drawn;
+        giveaway.IsLuckyDraw = isLuckyDraw;
+
+        await db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            winnerName = winner.User.Name,
+            isLuckyDraw,
+            message = isLuckyDraw
+                ? $"Lucky draw winner: {winner.User.Name} (no correct predictions)"
+                : $"Winner: {winner.User.Name} — predicted the exact score! ({correctPool.Count} correct entries)",
+        });
+    }
+
+    // ── Get current giveaway (admin view with entry count) ────────────────────
+    [HttpGet("giveaway")]
+    public async Task<IActionResult> GetGiveaway()
+    {
+        if (!IsAdmin) return Forbid();
+
+        var giveaway = await db.Giveaways
+            .Include(g => g.Match).ThenInclude(m => m.HomeTeam)
+            .Include(g => g.Match).ThenInclude(m => m.AwayTeam)
+            .Include(g => g.Winner)
+            .OrderByDescending(g => g.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (giveaway is null) return Ok(null);
+
+        return Ok(new
+        {
+            giveaway.Id,
+            giveaway.Prize,
+            Status = giveaway.Status.ToString(),
+            giveaway.IsLuckyDraw,
+            EntryCount = await db.GiveawayEntries.CountAsync(e => e.GiveawayId == giveaway.Id),
+            Match = new
+            {
+                giveaway.Match.Id,
+                HomeTeam = giveaway.Match.HomeTeam?.Name,
+                HomeTeamFlag = giveaway.Match.HomeTeam?.FlagUrl,
+                AwayTeam = giveaway.Match.AwayTeam?.Name,
+                AwayTeamFlag = giveaway.Match.AwayTeam?.FlagUrl,
+                giveaway.Match.MatchDate,
+                Status = giveaway.Match.Status.ToString(),
+            },
+            WinnerName = giveaway.Winner?.Name,
+        });
+    }
+
+    // ── Delete giveaway ───────────────────────────────────────────────────────
+    [HttpDelete("giveaway/{id:int}")]
+    public async Task<IActionResult> DeleteGiveaway(int id)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var giveaway = await db.Giveaways.FindAsync(id);
+        if (giveaway is null) return NotFound();
+
+        db.Giveaways.Remove(giveaway);
+        await db.SaveChangesAsync();
+
+        return Ok(new { message = "Giveaway deleted." });
+    }
 }
 
 public record MatchResultRequest(int? HomeScore, int? AwayScore, int? WinnerTeamId);
 public record GroupStandingsRequest(int? FirstTeamId, int? SecondTeamId);
 public record Best3rdQualifiersRequest(List<int> TeamIds);
+public record CreateGiveawayRequest(int MatchId, string Prize);

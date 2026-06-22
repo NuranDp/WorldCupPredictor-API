@@ -59,7 +59,7 @@ public class EspnSoccerService(
         var client = httpFactory.CreateClient("Espn");
 
         HttpResponseMessage response;
-        try { response = await client.GetAsync($"/scoreboard?dates={date}"); }
+        try { response = await client.GetAsync($"{BaseUrl}/scoreboard?dates={date}"); }
         catch (Exception ex)
         {
             logger.LogError(ex, "ESPN request failed for date {Date}", date);
