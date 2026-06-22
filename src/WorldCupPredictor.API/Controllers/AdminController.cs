@@ -250,7 +250,7 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
 
     // ── Draw winner ───────────────────────────────────────────────────────────
     [HttpPost("giveaway/{id:int}/draw")]
-    public async Task<IActionResult> DrawGiveaway(int id)
+    public async Task<IActionResult> DrawGiveaway(int id, [FromQuery] bool lucky = false)
     {
         if (!IsAdmin) return Forbid();
 
@@ -265,40 +265,55 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
         if (!giveaway.Entries.Any())
             return BadRequest(new { message = "No entries to draw from." });
 
-        const int MinParticipants = 100;
-        int totalEntries = giveaway.Entries.Count;
+        if (lucky)
+        {
+            // Lucky draw: pick from ALL entries regardless of correct predictions
+            var pool = giveaway.Entries.ToList();
+            var winner = pool[Random.Shared.Next(pool.Count)];
 
-        if (totalEntries < MinParticipants)
-            return BadRequest(new { message = $"Need at least {MinParticipants} entries to draw. Current: {totalEntries}." });
+            giveaway.WinnerUserId = winner.UserId;
+            giveaway.DrawnAt = DateTime.UtcNow;
+            giveaway.Status = GiveawayStatus.Drawn;
+            giveaway.IsLuckyDraw = true;
 
-        List<GiveawayEntry> correctPool = giveaway.Match.Status == MatchStatus.Completed
-            && giveaway.Match.HomeScore.HasValue
-            && giveaway.Match.AwayScore.HasValue
+            await db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                winnerName = winner.User.Name,
+                isLuckyDraw = true,
+                message = $"Lucky draw winner: {winner.User.Name}!",
+            });
+        }
+
+        // Regular draw: correct predictions only
+        if (giveaway.Match.Status != MatchStatus.Completed)
+            return BadRequest(new { message = "Match result must be synced before drawing from correct predictions." });
+
+        List<GiveawayEntry> correctPool = giveaway.Match.HomeScore.HasValue && giveaway.Match.AwayScore.HasValue
             ? giveaway.Entries
                 .Where(e => e.HomeScore == giveaway.Match.HomeScore.Value
                          && e.AwayScore == giveaway.Match.AwayScore.Value)
                 .ToList()
             : [];
 
-        bool isLuckyDraw = correctPool.Count == 0;
-        var pool = isLuckyDraw ? giveaway.Entries.ToList() : correctPool;
+        if (correctPool.Count == 0)
+            return BadRequest(new { message = "No correct predictions found. Use Lucky Draw to pick from all entries." });
 
-        var winner = pool[Random.Shared.Next(pool.Count)];
+        var regularWinner = correctPool[Random.Shared.Next(correctPool.Count)];
 
-        giveaway.WinnerUserId = winner.UserId;
+        giveaway.WinnerUserId = regularWinner.UserId;
         giveaway.DrawnAt = DateTime.UtcNow;
         giveaway.Status = GiveawayStatus.Drawn;
-        giveaway.IsLuckyDraw = isLuckyDraw;
+        giveaway.IsLuckyDraw = false;
 
         await db.SaveChangesAsync();
 
         return Ok(new
         {
-            winnerName = winner.User.Name,
-            isLuckyDraw,
-            message = isLuckyDraw
-                ? $"Lucky draw winner: {winner.User.Name} (no correct predictions)"
-                : $"Winner: {winner.User.Name} — predicted the exact score! ({correctPool.Count} correct entries)",
+            winnerName = regularWinner.User.Name,
+            isLuckyDraw = false,
+            message = $"Winner: {regularWinner.User.Name} — predicted the exact score! ({correctPool.Count} correct entries)",
         });
     }
 
@@ -336,6 +351,40 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
             },
             WinnerName = giveaway.Winner?.Name,
         });
+    }
+
+    // ── Get all entries for a giveaway ───────────────────────────────────────
+    [HttpGet("giveaway/{id:int}/entries")]
+    public async Task<IActionResult> GetGiveawayEntries(int id)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var giveaway = await db.Giveaways
+            .Include(g => g.Match)
+            .FirstOrDefaultAsync(g => g.Id == id);
+
+        if (giveaway is null) return NotFound();
+
+        var entries = await db.GiveawayEntries
+            .Include(e => e.User)
+            .Where(e => e.GiveawayId == id)
+            .OrderBy(e => e.SubmittedAt)
+            .Select(e => new
+            {
+                e.Id,
+                UserName = e.User.Name,
+                e.HomeScore,
+                e.AwayScore,
+                SubmittedAt = e.SubmittedAt,
+                IsCorrect = giveaway.Match.Status == MatchStatus.Completed
+                    && giveaway.Match.HomeScore.HasValue
+                    && giveaway.Match.AwayScore.HasValue
+                    && e.HomeScore == giveaway.Match.HomeScore.Value
+                    && e.AwayScore == giveaway.Match.AwayScore.Value,
+            })
+            .ToListAsync();
+
+        return Ok(entries);
     }
 
     // ── Delete giveaway ───────────────────────────────────────────────────────
