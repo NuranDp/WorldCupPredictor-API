@@ -234,25 +234,21 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
         return Ok(new { giveaway.Id });
     }
 
-    // ── Set a giveaway as the publicly active one ─────────────────────────────
-    [HttpPost("giveaway/{id:int}/activate")]
-    public async Task<IActionResult> ActivateGiveaway(int id)
+    // ── Toggle giveaway active status ─────────────────────────────────────────
+    [HttpPost("giveaway/{id:int}/toggle-active")]
+    public async Task<IActionResult> ToggleGiveawayActive(int id)
     {
         if (!IsAdmin) return Forbid();
 
         var giveaway = await db.Giveaways.FindAsync(id);
         if (giveaway is null) return NotFound();
-        if (giveaway.Status == GiveawayStatus.Drawn)
+        if (giveaway.Status == GiveawayStatus.Drawn && !giveaway.IsActive)
             return BadRequest(new { message = "Cannot activate a completed draw." });
 
-        await db.Giveaways
-            .Where(g => g.IsActive && g.Id != id)
-            .ExecuteUpdateAsync(s => s.SetProperty(g => g.IsActive, false));
-
-        giveaway.IsActive = true;
+        giveaway.IsActive = !giveaway.IsActive;
         await db.SaveChangesAsync();
 
-        return Ok(new { message = "Giveaway is now active." });
+        return Ok(new { giveaway.IsActive, message = giveaway.IsActive ? "Giveaway is now active." : "Giveaway is no longer active." });
     }
 
 

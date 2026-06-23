@@ -20,44 +20,53 @@ public class GiveawayController(AppDbContext db) : ControllerBase
         }
     }
 
-    // ── Active giveaway (public) ──────────────────────────────────────────────
+    // ── All active giveaways (public) ────────────────────────────────────────
     [HttpGet("active")]
     [AllowAnonymous]
     public async Task<IActionResult> GetActive()
     {
-        var giveaway = await db.Giveaways
+        var giveaways = await db.Giveaways
             .Include(g => g.Match).ThenInclude(m => m.HomeTeam)
             .Include(g => g.Match).ThenInclude(m => m.AwayTeam)
             .Include(g => g.Winner)
-            .FirstOrDefaultAsync(g => g.IsActive);
+            .Where(g => g.IsActive)
+            .OrderByDescending(g => g.CreatedAt)
+            .ToListAsync();
 
-        if (giveaway is null) return Ok(null);
+        if (giveaways.Count == 0) return Ok(Array.Empty<object>());
 
-        return Ok(new
+        var ids = giveaways.Select(g => g.Id).ToList();
+        var entryCounts = await db.GiveawayEntries
+            .Where(e => ids.Contains(e.GiveawayId))
+            .GroupBy(e => e.GiveawayId)
+            .Select(grp => new { GiveawayId = grp.Key, Count = grp.Count() })
+            .ToDictionaryAsync(x => x.GiveawayId, x => x.Count);
+
+        return Ok(giveaways.Select(g => new
         {
-            giveaway.Id,
-            giveaway.Prize,
-            Status = giveaway.Status.ToString(),
-            EntryCount = await db.GiveawayEntries.CountAsync(e => e.GiveawayId == giveaway.Id),
-            giveaway.IsLuckyDraw,
+            g.Id,
+            g.Prize,
+            Status = g.Status.ToString(),
+            EntryCount = entryCounts.GetValueOrDefault(g.Id, 0),
+            g.IsLuckyDraw,
             Match = new
             {
-                giveaway.Match.Id,
-                HomeTeam = giveaway.Match.HomeTeam?.Name,
-                HomeTeamFlag = giveaway.Match.HomeTeam?.FlagUrl,
-                AwayTeam = giveaway.Match.AwayTeam?.Name,
-                AwayTeamFlag = giveaway.Match.AwayTeam?.FlagUrl,
-                giveaway.Match.MatchDate,
-                HomeScore = giveaway.Match.HomeScore,
-                AwayScore = giveaway.Match.AwayScore,
+                g.Match.Id,
+                HomeTeam = g.Match.HomeTeam?.Name,
+                HomeTeamFlag = g.Match.HomeTeam?.FlagUrl,
+                AwayTeam = g.Match.AwayTeam?.Name,
+                AwayTeamFlag = g.Match.AwayTeam?.FlagUrl,
+                g.Match.MatchDate,
+                HomeScore = g.Match.HomeScore,
+                AwayScore = g.Match.AwayScore,
             },
-            Winner = giveaway.Winner is null ? null : new
+            Winner = g.Winner is null ? null : new
             {
-                giveaway.Winner.Name,
-                giveaway.Winner.AvatarUrl,
-                DrawnAt = giveaway.DrawnAt,
+                g.Winner.Name,
+                g.Winner.AvatarUrl,
+                DrawnAt = g.DrawnAt,
             },
-        });
+        }));
     }
 
     // ── Submit entry (auth required) ──────────────────────────────────────────
