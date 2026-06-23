@@ -29,10 +29,10 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
 
     // ── Trigger ESPN sync (free, no key) ─────────────────────────────────────
     [HttpPost("sync-results")]
-    public async Task<IActionResult> SyncResults()
+    public async Task<IActionResult> SyncResults([FromQuery] int days = 3)
     {
         if (!IsAdmin) return Forbid();
-        var count = await espn.SyncResultsAsync();
+        var count = await espn.SyncResultsAsync(days);
         return Ok(new { updated = count });
     }
 
@@ -144,6 +144,37 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
         return Ok(matches);
     }
 
+    // ── Get all group stage matches with kickoff times ────────────────────────
+    [HttpGet("group-matches")]
+    public async Task<IActionResult> GetGroupStageMatches()
+    {
+        if (!IsAdmin) return Forbid();
+
+        var matches = await db.Matches
+            .Where(m => m.Round == MatchRound.GroupStage)
+            .Include(m => m.HomeTeam).ThenInclude(t => t!.Group)
+            .Include(m => m.AwayTeam)
+            .OrderBy(m => m.MatchDate)
+            .Select(m => new
+            {
+                m.Id,
+                GroupName = m.HomeTeam!.Group.Name,
+                HomeTeamId = m.HomeTeamId,
+                HomeTeamName = m.HomeTeam.Name,
+                HomeTeamFlag = m.HomeTeam.FlagUrl,
+                AwayTeamId = m.AwayTeamId,
+                AwayTeamName = m.AwayTeam!.Name,
+                AwayTeamFlag = m.AwayTeam.FlagUrl,
+                m.MatchDate,
+                Status = m.Status.ToString(),
+                m.HomeScore,
+                m.AwayScore,
+            })
+            .ToListAsync();
+
+        return Ok(matches);
+    }
+
     // ── Get all groups with actual standings ──────────────────────────────────
     [HttpGet("groups")]
     public async Task<IActionResult> GetAdminGroups()
@@ -223,6 +254,7 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
 
         return Ok(new { message = "Giveaway is now active." });
     }
+
 
     // ── Close entries ─────────────────────────────────────────────────────────
     [HttpPost("giveaway/{id:int}/close")]
@@ -408,3 +440,4 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
 public record MatchResultRequest(int? HomeScore, int? AwayScore, int? WinnerTeamId);
 public record GroupStandingsRequest(int? FirstTeamId, int? SecondTeamId);
 public record Best3rdQualifiersRequest(List<int> TeamIds);
+public record CreateGiveawayRequest(int MatchId, string Prize);
