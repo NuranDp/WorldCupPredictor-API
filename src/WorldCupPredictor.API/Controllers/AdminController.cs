@@ -363,7 +363,7 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
 
     // ── Notify all users about a giveaway ────────────────────────────────────
     [HttpPost("giveaway/{id:int}/notify")]
-    public async Task<IActionResult> NotifyGiveaway(int id, [FromServices] IEmailService emailService)
+    public async Task<IActionResult> NotifyGiveaway(int id, [FromServices] IServiceScopeFactory scopeFactory)
     {
         if (!IsAdmin) return Forbid();
 
@@ -374,15 +374,18 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
 
         if (giveaway is null) return NotFound();
 
-        try
+        var userCount = await db.Users.CountAsync(u => !string.IsNullOrEmpty(u.Email));
+
+        // Fire and forget — emails send in background, response returns immediately
+        _ = Task.Run(async () =>
         {
-            var sent = await emailService.SendGiveawayNotificationAsync(giveaway);
-            return Ok(new { sent, message = $"Notification sent to {sent} user(s)." });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = $"Email failed: {ex.Message}" });
-        }
+            using var scope = scopeFactory.CreateScope();
+            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            try { await emailService.SendGiveawayNotificationAsync(giveaway); }
+            catch { /* logged inside EmailService */ }
+        });
+
+        return Ok(new { message = $"Sending notifications to {userCount} user(s) in the background." });
     }
 
     // ── Get all giveaways (admin view) ───────────────────────────────────────
