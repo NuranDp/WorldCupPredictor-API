@@ -36,9 +36,10 @@ public static class DbSeeder
 
         if (await db.TournamentGroups.AnyAsync())
         {
-            // Groups/teams already exist — still seed players if missing
             if (!await db.Players.AnyAsync())
                 await SeedPlayersAsync(db);
+            if (!await db.Matches.AnyAsync(m => m.Round == MatchRound.GroupStage))
+                await SeedGroupStageMatchesAsync(db);
             return;
         }
 
@@ -146,6 +147,9 @@ public static class DbSeeder
         // Seed players after teams are committed so the team dictionary lookup works
         if (!await db.Players.AnyAsync())
             await SeedPlayersAsync(db);
+
+        if (!await db.Matches.AnyAsync(m => m.Round == MatchRound.GroupStage))
+            await SeedGroupStageMatchesAsync(db);
     }
 
     private static async Task SeedPlayersAsync(AppDbContext db)
@@ -1405,6 +1409,122 @@ public static class DbSeeder
             new() { Round = MatchRound.Final,      SlotNumber = 32 },
         };
         await db.Matches.AddRangeAsync(slots);
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedGroupStageMatchesAsync(AppDbContext db)
+    {
+        var teamMap = await db.Teams.ToDictionaryAsync(t => t.FifaCode, t => t.Id);
+
+        static Match M(Dictionary<string, int> m, string home, string away, int month, int day, int hour, int minute = 0)
+            => new()
+            {
+                Round = MatchRound.GroupStage,
+                HomeTeamId = m[home],
+                AwayTeamId = m[away],
+                MatchDate = new DateTime(2026, month, day, hour, minute, 0, DateTimeKind.Utc),
+            };
+
+        var matches = new List<Match>
+        {
+            // ── Group A ───────────────────────────────────────────────────────
+            M(teamMap, "MEX", "RSA",  6, 11, 19),
+            M(teamMap, "KOR", "CZE",  6, 12,  2),
+            M(teamMap, "CZE", "RSA",  6, 18, 16),
+            M(teamMap, "MEX", "KOR",  6, 19,  1),
+            M(teamMap, "CZE", "MEX",  6, 25,  1),
+            M(teamMap, "RSA", "KOR",  6, 25,  1),
+
+            // ── Group B ───────────────────────────────────────────────────────
+            M(teamMap, "CAN", "BIH",  6, 12, 19),
+            M(teamMap, "QAT", "SUI",  6, 12, 22),
+            M(teamMap, "SUI", "BIH",  6, 18, 19),
+            M(teamMap, "CAN", "QAT",  6, 18, 22),
+            M(teamMap, "SUI", "CAN",  6, 24, 19),
+            M(teamMap, "BIH", "QAT",  6, 24, 19),
+
+            // ── Group C ───────────────────────────────────────────────────────
+            M(teamMap, "BRA", "MAR",  6, 12, 22),
+            M(teamMap, "HAI", "SCO",  6, 14,  1),
+            M(teamMap, "SCO", "MAR",  6, 19, 22),
+            M(teamMap, "BRA", "HAI",  6, 20,  0, 30),
+            M(teamMap, "SCO", "BRA",  6, 24, 22),
+            M(teamMap, "MAR", "HAI",  6, 24, 22),
+
+            // ── Group D ───────────────────────────────────────────────────────
+            M(teamMap, "USA", "PAR",  6, 13,  1),
+            M(teamMap, "AUS", "TUR",  6, 14,  4),
+            M(teamMap, "USA", "AUS",  6, 19, 19),
+            M(teamMap, "TUR", "PAR",  6, 20,  3),
+            M(teamMap, "TUR", "USA",  6, 26,  2),
+            M(teamMap, "PAR", "AUS",  6, 26,  2),
+
+            // ── Group E ───────────────────────────────────────────────────────
+            M(teamMap, "GER", "CUW",  6, 14, 17),
+            M(teamMap, "CIV", "ECU",  6, 14, 23),
+            M(teamMap, "GER", "CIV",  6, 20, 20),
+            M(teamMap, "ECU", "CUW",  6, 21,  3),
+            M(teamMap, "ECU", "GER",  6, 25, 20),
+            M(teamMap, "CUW", "CIV",  6, 25, 20),
+
+            // ── Group F ───────────────────────────────────────────────────────
+            M(teamMap, "NED", "JPN",  6, 14, 20),
+            M(teamMap, "SWE", "TUN",  6, 15,  2),
+            M(teamMap, "NED", "SWE",  6, 20, 17),
+            M(teamMap, "TUN", "JPN",  6, 21,  4),
+            M(teamMap, "JPN", "SWE",  6, 25, 23),
+            M(teamMap, "TUN", "NED",  6, 25, 23),
+
+            // ── Group G ───────────────────────────────────────────────────────
+            M(teamMap, "BEL", "EGY",  6, 15, 19),
+            M(teamMap, "IRN", "NZL",  6, 16,  1),
+            M(teamMap, "BEL", "IRN",  6, 21, 19),
+            M(teamMap, "NZL", "EGY",  6, 22,  1),
+            M(teamMap, "EGY", "IRN",  6, 27,  3),
+            M(teamMap, "NZL", "BEL",  6, 27,  3),
+
+            // ── Group H ───────────────────────────────────────────────────────
+            M(teamMap, "ESP", "CPV",  6, 15, 16),
+            M(teamMap, "KSA", "URU",  6, 15, 22),
+            M(teamMap, "ESP", "KSA",  6, 21, 16),
+            M(teamMap, "URU", "CPV",  6, 21, 22),
+            M(teamMap, "CPV", "KSA",  6, 27,  0),
+            M(teamMap, "URU", "ESP",  6, 27,  0),
+
+            // ── Group I ───────────────────────────────────────────────────────
+            M(teamMap, "FRA", "SEN",  6, 16, 19),
+            M(teamMap, "IRQ", "NOR",  6, 16, 22),
+            M(teamMap, "FRA", "IRQ",  6, 22, 21),
+            M(teamMap, "NOR", "SEN",  6, 23,  0),
+            M(teamMap, "NOR", "FRA",  6, 26, 19),
+            M(teamMap, "SEN", "IRQ",  6, 26, 19),
+
+            // ── Group J ───────────────────────────────────────────────────────
+            M(teamMap, "ARG", "ALG",  6, 17,  1),
+            M(teamMap, "AUT", "JOR",  6, 17,  4),
+            M(teamMap, "ARG", "AUT",  6, 22, 17),
+            M(teamMap, "JOR", "ALG",  6, 23,  3),
+            M(teamMap, "ALG", "AUT",  6, 28,  2),
+            M(teamMap, "JOR", "ARG",  6, 28,  2),
+
+            // ── Group K ───────────────────────────────────────────────────────
+            M(teamMap, "POR", "COD",  6, 17, 17),
+            M(teamMap, "UZB", "COL",  6, 18,  2),
+            M(teamMap, "POR", "UZB",  6, 23, 17),
+            M(teamMap, "COL", "COD",  6, 24,  2),
+            M(teamMap, "COL", "POR",  6, 27, 23, 30),
+            M(teamMap, "COD", "UZB",  6, 27, 23, 30),
+
+            // ── Group L ───────────────────────────────────────────────────────
+            M(teamMap, "ENG", "CRO",  6, 17, 20),
+            M(teamMap, "GHA", "PAN",  6, 17, 23),
+            M(teamMap, "ENG", "GHA",  6, 23, 20),
+            M(teamMap, "PAN", "CRO",  6, 23, 23),
+            M(teamMap, "PAN", "ENG",  6, 27, 21),
+            M(teamMap, "CRO", "GHA",  6, 27, 21),
+        };
+
+        await db.Matches.AddRangeAsync(matches);
         await db.SaveChangesAsync();
     }
 }
