@@ -338,6 +338,53 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
         });
     }
 
+    // ── [TEST] Manually trigger giveaway auto-close ──────────────────────────
+    [HttpPost("giveaway/trigger-auto-close")]
+    public async Task<IActionResult> TriggerAutoClose([FromQuery] int offsetMinutes = 45)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var threshold = DateTime.UtcNow.AddMinutes(-offsetMinutes);
+
+        var toClose = await db.Giveaways
+            .Include(g => g.Match)
+            .Where(g => g.Status == GiveawayStatus.Open
+                     && g.Match.MatchDate.HasValue
+                     && g.Match.MatchDate.Value <= threshold)
+            .ToListAsync();
+
+        foreach (var g in toClose)
+            g.Status = GiveawayStatus.Closed;
+
+        await db.SaveChangesAsync();
+
+        return Ok(new { closed = toClose.Count, message = $"Auto-closed {toClose.Count} giveaway(s)." });
+    }
+
+    // ── Notify all users about a giveaway ────────────────────────────────────
+    [HttpPost("giveaway/{id:int}/notify")]
+    public async Task<IActionResult> NotifyGiveaway(int id, [FromServices] IEmailService emailService)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var giveaway = await db.Giveaways
+            .Include(g => g.Match).ThenInclude(m => m.HomeTeam)
+            .Include(g => g.Match).ThenInclude(m => m.AwayTeam)
+            .FirstOrDefaultAsync(g => g.Id == id);
+
+        if (giveaway is null) return NotFound();
+
+        try
+        {
+            var sent = await emailService.SendGiveawayNotificationAsync(giveaway);
+            return Ok(new { sent, message = $"Notification sent to {sent} user(s)." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Email failed: {ex.Message}" });
+        }
+    }
+
     // ── Get all giveaways (admin view) ───────────────────────────────────────
     [HttpGet("giveaway")]
     public async Task<IActionResult> GetGiveaway()

@@ -33,7 +33,9 @@ builder.Services.Configure<ScoringOptions>(builder.Configuration.GetSection("Sco
 builder.Services.AddScoped<ScoringService>();
 builder.Services.AddScoped<ApiFootballService>();   // kept for manual admin use
 builder.Services.AddScoped<EspnSoccerService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddHostedService<ResultsPollingService>();
+builder.Services.AddHostedService<GiveawayAutoCloseService>();
 
 // ESPN — free, no key required
 builder.Services.AddHttpClient("Espn", client =>
