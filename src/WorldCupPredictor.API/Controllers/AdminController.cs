@@ -269,6 +269,24 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
         return Ok(new { message = "Entries closed." });
     }
 
+    // ── Archive without drawing a winner ─────────────────────────────────────
+    [HttpPost("giveaway/{id:int}/archive")]
+    public async Task<IActionResult> ArchiveGiveaway(int id)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var giveaway = await db.Giveaways.FindAsync(id);
+        if (giveaway is null) return NotFound();
+        if (giveaway.Status == GiveawayStatus.Drawn)
+            return BadRequest(new { message = "Already drawn." });
+
+        giveaway.Status = GiveawayStatus.Drawn;
+        giveaway.DrawnAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        return Ok(new { message = "Giveaway archived with no winner." });
+    }
+
     // ── Draw winner ───────────────────────────────────────────────────────────
     [HttpPost("giveaway/{id:int}/draw")]
     public async Task<IActionResult> DrawGiveaway(int id, [FromQuery] bool lucky = false)
