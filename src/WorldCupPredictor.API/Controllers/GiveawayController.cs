@@ -29,7 +29,7 @@ public class GiveawayController(AppDbContext db) : ControllerBase
             .Include(g => g.Match).ThenInclude(m => m.HomeTeam)
             .Include(g => g.Match).ThenInclude(m => m.AwayTeam)
             .Include(g => g.Winner)
-            .Where(g => g.IsActive)
+            .Where(g => g.IsActive && g.Status != GiveawayStatus.Drawn)
             .OrderByDescending(g => g.CreatedAt)
             .ToListAsync();
 
