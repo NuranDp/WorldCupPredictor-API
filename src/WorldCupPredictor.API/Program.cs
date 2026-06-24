@@ -34,6 +34,7 @@ builder.Services.AddScoped<ScoringService>();
 builder.Services.AddScoped<ApiFootballService>();   // kept for manual admin use
 builder.Services.AddScoped<EspnSoccerService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IPushService, PushService>();
 builder.Services.AddHostedService<ResultsPollingService>();
 builder.Services.AddHostedService<GiveawayAutoCloseService>();
 

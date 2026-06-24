@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Giveaway> Giveaways => Set<Giveaway>();
     public DbSet<GiveawayEntry> GiveawayEntries => Set<GiveawayEntry>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -151,6 +152,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .HasForeignKey(ge => ge.GiveawayId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(ge => ge.User).WithMany()
              .HasForeignKey(ge => ge.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PushSubscription>(e =>
+        {
+            e.HasIndex(p => new { p.UserId, p.Endpoint }).IsUnique();
+            e.HasOne(p => p.User).WithMany()
+             .HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

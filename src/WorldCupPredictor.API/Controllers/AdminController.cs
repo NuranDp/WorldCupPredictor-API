@@ -379,7 +379,7 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
         return Ok(new { closed = toClose.Count, message = $"Auto-closed {toClose.Count} giveaway(s)." });
     }
 
-    // ── Notify all users about a giveaway ────────────────────────────────────
+    // ── Notify all users about a giveaway (email + push) ─────────────────────
     [HttpPost("giveaway/{id:int}/notify")]
     public async Task<IActionResult> NotifyGiveaway(int id, [FromServices] IServiceScopeFactory scopeFactory)
     {
@@ -393,17 +393,18 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
         if (giveaway is null) return NotFound();
 
         var userCount = await db.Users.CountAsync(u => !string.IsNullOrEmpty(u.Email));
+        var pushCount = await db.PushSubscriptions.CountAsync();
 
-        // Fire and forget — emails send in background, response returns immediately
         _ = Task.Run(async () =>
         {
             using var scope = scopeFactory.CreateScope();
             var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-            try { await emailService.SendGiveawayNotificationAsync(giveaway); }
-            catch { /* logged inside EmailService */ }
+            var pushService = scope.ServiceProvider.GetRequiredService<IPushService>();
+            try { await emailService.SendGiveawayNotificationAsync(giveaway); } catch { }
+            try { await pushService.SendGiveawayNotificationAsync(id); } catch { }
         });
 
-        return Ok(new { message = $"Sending notifications to {userCount} user(s) in the background." });
+        return Ok(new { message = $"Sending to {userCount} email(s) and {pushCount} push subscriber(s) in the background." });
     }
 
     // ── Get all giveaways (admin view) ───────────────────────────────────────
