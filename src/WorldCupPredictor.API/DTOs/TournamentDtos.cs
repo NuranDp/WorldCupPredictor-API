@@ -20,7 +20,9 @@ public record TeamDto(
 public record GroupWithTeamsDto(
     int Id,
     string Name,
-    List<TeamDto> Teams
+    List<TeamDto> Teams,
+    int? ActualFirstTeamId,
+    int? ActualSecondTeamId
 );
 
 public record MatchSlotDto(

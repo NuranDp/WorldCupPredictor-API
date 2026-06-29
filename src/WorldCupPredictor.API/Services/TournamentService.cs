@@ -33,7 +33,9 @@ public class TournamentService(AppDbContext db) : ITournamentService
             g.Teams
               .OrderBy(t => t.Seeding)
               .Select(t => new TeamDto(t.Id, t.Name, t.FlagUrl, t.FifaCode, t.Seeding, t.FifaRanking))
-              .ToList()
+              .ToList(),
+            g.ActualFirstTeamId,
+            g.ActualSecondTeamId
         )).ToList();
     }
 

@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using WorldCupPredictor.API.Data;
 using WorldCupPredictor.API.Services;
 
 namespace WorldCupPredictor.API.Controllers;
 
 [ApiController]
 [Route("api")]
-public class TournamentController(ITournamentService tournamentService) : ControllerBase
+public class TournamentController(ITournamentService tournamentService, AppDbContext db) : ControllerBase
 {
     [HttpGet("tournament/config")]
     public async Task<IActionResult> GetConfig()
@@ -35,5 +37,14 @@ public class TournamentController(ITournamentService tournamentService) : Contro
     {
         var players = await tournamentService.GetPlayersForTeamAsync(teamId);
         return Ok(players);
+    }
+
+    [HttpGet("tournament/actual-best3rd")]
+    public async Task<IActionResult> GetActualBest3rd()
+    {
+        var teamIds = await db.ActualBest3rdQualifiers
+            .Select(q => q.TeamId)
+            .ToListAsync();
+        return Ok(new { teamIds });
     }
 }

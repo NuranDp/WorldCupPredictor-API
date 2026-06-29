@@ -441,6 +441,7 @@ public class AdminController(AppDbContext db, ScoringService scoring, ApiFootbal
             Match = new
             {
                 g.Match.Id,
+                SlotNumber = g.Match.SlotNumber,
                 HomeTeam = g.Match.HomeTeam?.Name,
                 HomeTeamFlag = g.Match.HomeTeam?.FlagUrl,
                 AwayTeam = g.Match.AwayTeam?.Name,
