@@ -8,7 +8,7 @@ RUN dotnet restore
 
 COPY src/WorldCupPredictor.API/ ./src/WorldCupPredictor.API/
 RUN dotnet publish src/WorldCupPredictor.API/WorldCupPredictor.API.csproj \
-    -c Release -o /app/publish --no-restore
+    -c Release -o /app/publish
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
